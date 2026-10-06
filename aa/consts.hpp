@@ -3,9 +3,9 @@
 #define CONSTS_HPP
 
 const int ALG_COUNT = 9;
-const int RUNS_PER_SIZE = 512;
-const int VEC_SIZE_JUMP = 1;
+const int RUNS_PER_SIZE = 9*128;
+const int VEC_SIZE_JUMP = 8;
 const int JUMP_COUNT = 128;
-long double DIVISOR_TEMPO = 1e6;
+long double DIVISOR_TEMPO = 1000.0;
 
 #endif

@@ -197,25 +197,36 @@ void closeFile() {
 
         for(int i = 0; i < JUMP_COUNT; i++) {
             arq << (i + 1) * VEC_SIZE_JUMP << ',';
-            for(int j = 0; j < ALG_COUNT; j++) { 
+            for(int j = 0; j < ALG_COUNT; j++) {
+                double perc = 0.1;
+
                 long_double_t mean = 0, variance = 0;
-                
-                for(int r = 0; r < RUNS_PER_SIZE; r++) {               
-                    mean += (long_double_t) tempos[i][j][r] / 1000.0l;
+                long_double_t ly = round((double) RUNS_PER_SIZE * (1.0 - perc));
+                long_double_t n = 0;
+
+                std::sort(&tempos[i][j][0], &tempos[i][j][RUNS_PER_SIZE - 1]);
+
+                for(int r = floor((double) RUNS_PER_SIZE * (perc / 2.0)); r < ly; r++) { 
+                    n++;
+                    mean += (long_double_t) tempos[i][j][r] / DIVISOR_TEMPO;
                 }
 
-                mean /= (long_double_t) RUNS_PER_SIZE;
-                
-                for(int r = 0; r < RUNS_PER_SIZE; r++) {
-                    variance += powl(((long_double_t) tempos[i][j][r] / 1000.0l) - mean, 2) / (long_double_t) (RUNS_PER_SIZE - 1);
+                mean /= n;
+                n--;
+
+                for(int r = 0; r < ly; r++) {
+                    variance += powl(((long_double_t) tempos[i][j][r] / DIVISOR_TEMPO) - mean, 2) / n;
                 }
 
                 long_double_t a = ((mean * mean) / (variance * variance));
                 long_double_t b = (variance * variance) / mean;
 
-                std::cout << a << ' ' << b << '\n';
-
-                arq << mean;
+                if(a > 1) {
+                    arq << ((a - 1) * b);
+                } else {
+                    arq << mean;
+                    std::cout << "mean used at " << i << '\n';
+                }
                 if(j != ALG_COUNT - 1) arq << ',';
                 else arq << '\n';
             }
