@@ -23,52 +23,69 @@ namespace sc = std::chrono;
 typedef sc::_V2::steady_clock::rep timerep_t;
 
 std::ofstream arq;
-long_double_t **tempos = nullptr;
+
+// tempos[vecsize][alg][run]
+int64_t ***tempos = nullptr;
 
 void thread() {
     int cthread = omp_get_thread_num();
     int thread_count = omp_get_num_threads();
-    int runs = RUNS_PER_SIZE / thread_count;
+    std::pair<int, int> runs;
 
-    if(cthread < RUNS_PER_SIZE % thread_count) runs++;
+    // 0:1 2:3 4:6 7:9 10:12 13:15
+    // 2 =>  4:6  => 16 - (4*3) : 
+    // 3 =>  7:9  => 
+    // 4 => 10:12 => 
+    // 5 => 13:15 => 
+
+    int lct = thread_count - (RUNS_PER_SIZE % thread_count);
+    int rc = (RUNS_PER_SIZE / thread_count);
+    if(cthread < lct) {
+        runs.first = cthread * rc;
+    } else {
+        rc++;
+        runs.first = RUNS_PER_SIZE - ((thread_count - cthread) * rc);
+    }
+
+    runs.second = runs.first + rc;
 
     // Configura o RNG, com a seed sendo o relógio local em millisegundos.
     std::mt19937 rng;
     std::uniform_int_distribution<int_fast32_t> dist;
     rng.seed(sc::duration_cast<sc::milliseconds>(sc::system_clock::now().time_since_epoch()).count());
 
-    int vec[MAX_VECTOR_SIZE];
+    int vec[VEC_SIZE_JUMP * JUMP_COUNT];
     sc::steady_clock::time_point comeco, fim;
 
-    for(int r = 0; r < runs; r++) {
+    for(int r = runs.first; r < runs.second; r++) {
 
-        for(size_t vecsize = VEC_SIZE_JUMP; vecsize <= MAX_VECTOR_SIZE; vecsize += VEC_SIZE_JUMP) {
-            int i = (vecsize / VEC_SIZE_JUMP) - 1;
+        for(int i = 0; i < JUMP_COUNT; i++) {
+            size_t vecsize = (i + 1) * VEC_SIZE_JUMP;
 
             /*
              *  BUBBLE SORT
-             
+             */
             fillvec(vec, vecsize, dist, rng);
             comeco = sc::steady_clock::now();
 
             bubblesort(vec, 0, vecsize - 1);
             fim = sc::steady_clock::now();
-#           pragma omp atomic
-            tempos[i][0] += (long_double_t) (fim - comeco).count() / DIVISOR_TEMPO;
-*/
+#           pragma omp atomic write
+            tempos[i][0][r] = (fim - comeco).count();
+
 
 
             /*
              *  INSERTION SORT
-             
+             */
             fillvec(vec, vecsize, dist, rng);
             comeco = sc::steady_clock::now();
 
             insertion(vec, 0, vecsize - 1);
             fim = sc::steady_clock::now();
-#           pragma omp atomic
-            tempos[i][1] += (long_double_t) (fim - comeco).count() / DIVISOR_TEMPO;
-*/
+#           pragma omp atomic write
+            tempos[i][1][r] = (fim - comeco).count();
+
 
 
             /*
@@ -79,8 +96,8 @@ void thread() {
 
             quicksort(vec, 0, vecsize - 1);
             fim = sc::steady_clock::now();
-#           pragma omp atomic
-            tempos[i][2] += (long_double_t) (fim - comeco).count() / DIVISOR_TEMPO;
+#           pragma omp atomic write
+            tempos[i][2][r] = (fim - comeco).count();
 
 
 
@@ -92,23 +109,23 @@ void thread() {
 
             quicksort(vec, 0, vecsize - 1, 70);
             fim = sc::steady_clock::now();
-#           pragma omp atomic
-            tempos[i][3] += (long_double_t)  (fim - comeco).count() / DIVISOR_TEMPO;
+#           pragma omp atomic write
+            tempos[i][3][r] = (fim - comeco).count();
 
 
         
             /*
              *  SHELLSORT
-             
+             */
             fillvec(vec, vecsize, dist, rng);
             comeco = sc::steady_clock::now();
 
             shellsort(vec, 0, vecsize - 1);
             fim = sc::steady_clock::now();
 
-#           pragma omp atomic
-            tempos[i][4] += (long_double_t) (fim - comeco).count() / DIVISOR_TEMPO;
-*/
+#           pragma omp atomic write
+            tempos[i][4][r] = (fim - comeco).count();
+
 
 
             /*
@@ -119,8 +136,8 @@ void thread() {
 
             std::sort(&vec[0], &vec[vecsize - 1]);
             fim = sc::steady_clock::now();
-#           pragma omp atomic
-            tempos[i][5] += (long_double_t)  (fim - comeco).count() / DIVISOR_TEMPO;
+#           pragma omp atomic write
+            tempos[i][5][r] = (fim - comeco).count();
 
 
 
@@ -132,8 +149,8 @@ void thread() {
 
             heapsort(vec, vecsize);
             fim = sc::steady_clock::now();
-#           pragma omp atomic
-            tempos[i][6] += (long_double_t)  (fim - comeco).count() / DIVISOR_TEMPO;
+#           pragma omp atomic write
+            tempos[i][6][r] = (fim - comeco).count();
 
 
 
@@ -145,22 +162,22 @@ void thread() {
 
             mergesort(vec, 0, vecsize - 1);
             fim = sc::steady_clock::now();
-#           pragma omp atomic
-            tempos[i][7] += (long_double_t)  (fim - comeco).count() / DIVISOR_TEMPO;
+#           pragma omp atomic write
+            tempos[i][7][r] = (fim - comeco).count();
 
 
             
             /*
              *  SELECTION SORT
-             
+             */
             fillvec(vec, vecsize, dist, rng);
             comeco = sc::steady_clock::now();
 
             selectionsort(vec, vecsize);
             fim = sc::steady_clock::now();
-#           pragma omp atomic
-            tempos[i][8] += (long_double_t)  (fim - comeco).count() / DIVISOR_TEMPO;
-*/
+#           pragma omp atomic write
+            tempos[i][8][r] = (fim - comeco).count();
+
 
 
 //#           pragma omp critical
@@ -169,7 +186,7 @@ void thread() {
 
 
 #       pragma omp critical
-        printf("[%d] Run %d/%d ended\n", cthread, r + 1, runs);
+        printf("[%d] Run %d/%d ended\n", cthread, r + 1, runs.second);
     }
 }
 
@@ -178,14 +195,29 @@ void closeFile() {
         const char msg[] = "\nEscrevendo resultados ao disco.\n";
         std::fwrite(&msg, sizeof(msg), 1, stdout);
 
-        for(int i = 1; i < (MAX_VECTOR_SIZE / VEC_SIZE_JUMP + 1); i++) {
-            arq << i * VEC_SIZE_JUMP << ',';
-            
-            for(int j = 0; j < ALG_COUNT; j++) {
-                arq << std::setprecision(9) 
-                << tempos[i - 1][j] / (long_double_t) RUNS_PER_SIZE;
-                if(j == ALG_COUNT - 1) arq << '\n';
-                else arq << ',';
+        for(int i = 0; i < JUMP_COUNT; i++) {
+            arq << (i + 1) * VEC_SIZE_JUMP << ',';
+            for(int j = 0; j < ALG_COUNT; j++) { 
+                long_double_t mean = 0, variance = 0;
+                
+                for(int r = 0; r < RUNS_PER_SIZE; r++) {               
+                    mean += (long_double_t) tempos[i][j][r] / 1000.0l;
+                }
+
+                mean /= (long_double_t) RUNS_PER_SIZE;
+                
+                for(int r = 0; r < RUNS_PER_SIZE; r++) {
+                    variance += powl(((long_double_t) tempos[i][j][r] / 1000.0l) - mean, 2) / (long_double_t) (RUNS_PER_SIZE - 1);
+                }
+
+                long_double_t a = ((mean * mean) / (variance * variance));
+                long_double_t b = (variance * variance) / mean;
+
+                std::cout << a << ' ' << b << '\n';
+
+                arq << mean;
+                if(j != ALG_COUNT - 1) arq << ',';
+                else arq << '\n';
             }
         }
         arq << std::flush;
@@ -215,9 +247,14 @@ int main() {
     std::atexit(closeFile);
     std::signal(SIGINT, handleSignal);
     
-    tempos = new long_double_t*[MAX_VECTOR_SIZE / VEC_SIZE_JUMP];
-    for(int i = 0; i < (MAX_VECTOR_SIZE / VEC_SIZE_JUMP); i++)
-        tempos[i] = new long_double_t[ALG_COUNT](0);
+    // tempos[vecsize][alg][run]
+    tempos = new int64_t**[JUMP_COUNT];
+    for(int i = 0; i < JUMP_COUNT; i++) {
+        tempos[i] = new int64_t*[ALG_COUNT];
+        for(int j = 0; j < RUNS_PER_SIZE; j++) {
+            tempos[i][j] = new int64_t[RUNS_PER_SIZE](-1);
+        }
+    }
 
 #   pragma omp parallel num_threads(thread_count)
     thread();
